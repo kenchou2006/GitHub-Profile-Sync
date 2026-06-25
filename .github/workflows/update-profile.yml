@@ -21,6 +21,8 @@ jobs:
       - name: Fetch and Compare updated_at
         id: check_update
         run: |
+          git checkout data 2>/dev/null || (git checkout --orphan data && git rm -rf .)
+
           if [ -f profile.json ]; then
             OLD_TIME=$(jq -r '.updated_at' profile.json)
           else
@@ -39,6 +41,12 @@ jobs:
             
             jq '.' temp.json > profile.json
             rm temp.json
+            
+            git config --local user.email "github-actions[bot]@users.noreply.github.com"
+            git config --local user.name "github-actions[bot]"
+            git add profile.json
+            git commit -m "chore: update profile data ($NEW_TIME)"
+            git push -u origin data
           else
             echo "💤 No changes detected ($OLD_TIME). Skipping update."
             echo "updated=false" >> $GITHUB_OUTPUT
@@ -52,17 +60,6 @@ jobs:
           TAG=$(date +'%Y.%m.%d.%H%M%S')
           echo "release_tag=$TAG" >> $GITHUB_OUTPUT
 
-      - name: Push to data branch
-        if: steps.check_update.outputs.updated == 'true'
-        run: |
-          git config --local user.email "github-actions[bot]@users.noreply.github.com"
-          git config --local user.name "github-actions[bot]"
-          git checkout data 2>/dev/null || (git checkout --orphan data && git rm -rf .)
-          git checkout main -- profile.json 2>/dev/null || git checkout master -- profile.json
-          git add profile.json
-          git commit -m "chore: update profile data (${{ steps.check_update.outputs.timestamp }})" || true
-          git push -u origin data
-
       - name: Create Release
         if: steps.check_update.outputs.updated == 'true'
         uses: softprops/action-gh-release@v1
@@ -74,15 +71,19 @@ jobs:
             
             **jsDelivr CDN URLs:**
             
-            Latest version (data branch - recommended):
+            Latest version:
             ```
-            https://cdn.jsdelivr.net/gh/${{ github.repository }}@data/profile.json
+            https://cdn.jsdelivr.net/gh/${{ github.repository }}@latest/profile.json
             ```
             
             Specific version:
             ```
             https://cdn.jsdelivr.net/gh/${{ github.repository }}@${{ steps.tag.outputs.release_tag }}/profile.json
             ```
-          files: profile.json
+            
+            Data branch:
+            ```
+            https://cdn.jsdelivr.net/gh/${{ github.repository }}@data/profile.json
+            ```
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
