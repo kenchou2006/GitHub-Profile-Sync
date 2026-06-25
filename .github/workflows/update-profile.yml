@@ -19,9 +19,11 @@ jobs:
           fetch-depth: 0
 
       - name: Fetch and Compare updated_at
+        id: check_update
         run: |
-          git checkout data 2>/dev/null || (git checkout --orphan data && git rm -rf .)
-
+          # Create a temporary directory for profile data
+          mkdir -p temp_profile
+          
           if [ -f profile.json ]; then
             OLD_TIME=$(jq -r '.updated_at' profile.json)
           else
@@ -29,22 +31,35 @@ jobs:
           fi
 
           curl -s -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
-               https://api.github.com/users/${{ github.repository_owner }} > temp.json
+               https://api.github.com/users/${{ github.repository_owner }} > temp_profile/profile.json
           
-          NEW_TIME=$(jq -r '.updated_at' temp.json)
+          NEW_TIME=$(jq -r '.updated_at' temp_profile/profile.json)
 
           if [ "$OLD_TIME" != "$NEW_TIME" ]; then
             echo "✨ Update detected! Changed from $OLD_TIME to $NEW_TIME"
-            
-            jq '.' temp.json > profile.json
-            rm temp.json
-            
-            git config --local user.email "github-actions[bot]@users.noreply.github.com"
-            git config --local user.name "github-actions[bot]"
-            git add profile.json
-            git commit -m "chore: update profile data ($NEW_TIME)"
-            git push -u origin data
+            echo "updated=true" >> $GITHUB_OUTPUT
+            echo "timestamp=$NEW_TIME" >> $GITHUB_OUTPUT
           else
             echo "💤 No changes detected ($OLD_TIME). Skipping update."
-            rm temp.json
+            echo "updated=false" >> $GITHUB_OUTPUT
           fi
+
+      - name: Generate Release Tag
+        if: steps.check_update.outputs.updated == 'true'
+        id: tag
+        run: |
+          # Use date format: YYYY.MM.DD.HHmmss
+          TAG=$(date +'%Y.%m.%d.%H%M%S')
+          echo "release_tag=$TAG" >> $GITHUB_OUTPUT
+
+      - name: Create Release
+        if: steps.check_update.outputs.updated == 'true'
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ steps.tag.outputs.release_tag }}
+          name: "Profile Update - ${{ steps.tag.outputs.release_tag }}"
+          body: |
+            Profile data updated at: `${{ steps.check_update.outputs.timestamp }}`
+          files: temp_profile/profile.json
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
