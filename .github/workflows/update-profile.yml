@@ -60,6 +60,12 @@ jobs:
           TAG=$(date +'%Y.%m.%d.%H%M%S')
           echo "release_tag=$TAG" >> $GITHUB_OUTPUT
 
+      - name: Prepare Release Files
+        if: steps.check_update.outputs.updated == 'true'
+        run: |
+          mkdir -p release_files
+          cp profile.json release_files/
+
       - name: Create Release
         if: steps.check_update.outputs.updated == 'true'
         uses: softprops/action-gh-release@v1
@@ -85,5 +91,6 @@ jobs:
             ```
             https://cdn.jsdelivr.net/gh/${{ github.repository }}@data/profile.json
             ```
+          files: release_files/profile.json
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
